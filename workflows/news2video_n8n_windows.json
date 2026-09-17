@@ -1,0 +1,1052 @@
+{
+  "name": "GenerateVideoGermanNewsFa",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// دریافت خروجی Basic LLM Chain\nlet data = $json;\n\n// در بعضی نسخه‌ها خروجی داخل output قرار دارد\nif (data.output !== undefined) {\n  data = data.output;\n}\n\n// اگر خروجی به‌صورت رشته باشد، Markdown احتمالی را حذف کن\nif (typeof data === 'string') {\n  let jsonText = data.trim();\n\n  jsonText = jsonText\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n\n  try {\n    data = JSON.parse(jsonText);\n  } catch (error) {\n    throw new Error(\n      `LLM output is not valid JSON: ${error.message}`\n    );\n  }\n}\n\n// کنترل ساختار اصلی\nif (!data || typeof data !== 'object' || Array.isArray(data)) {\n  throw new Error('Storyboard output is empty or invalid.');\n}\n\nif (!Array.isArray(data.scenes)) {\n  throw new Error('The \"scenes\" field must be an array.');\n}\n\n// باید دقیقاً سه صحنه وجود داشته باشد\nif (data.scenes.length !== 3) {\n  throw new Error(\n    `Exactly 3 scenes are required, but received ${data.scenes.length}.`\n  );\n}\n\n/**\n * پاک‌سازی عمومی متن فارسی\n * مناسب voice و subtitle\n */\nfunction normalizePersianText(value) {\n  return String(value || '')\n    // یکسان‌سازی حروف عربی و فارسی\n    .replace(/ي/g, 'ی')\n    .replace(/ى/g, 'ی')\n    .replace(/ك/g, 'ک')\n\n    // تبدیل ویرگول و علامت سؤال انگلیسی\n    .replace(/,/g, '،')\n    .replace(/\\?/g, '؟')\n\n    // حذف فاصله پیش از علائم نگارشی\n    .replace(/\\s+([،؛:.!؟])/g, '$1')\n\n    // افزودن یک فاصله پس از علائم، در صورت نیاز\n    .replace(/([،؛.!؟])(?=[^\\s\\d])/g, '$1 ')\n\n    // جلوگیری از فاصله‌گذاری داخل اعداد اعشاری\n    .replace(/(\\d)\\.\\s+(\\d)/g, '$1.$2')\n\n    // حذف نشانه‌های تکراری\n    .replace(/،{2,}/g, '،')\n    .replace(/؛{2,}/g, '؛')\n    .replace(/\\.{2,}/g, '.')\n    .replace(/؟{2,}/g, '؟')\n    .replace(/!{2,}/g, '!')\n\n    // تبدیل چند فاصله به یک فاصله\n    .replace(/[ \\t]+/g, ' ')\n\n    // حذف فاصله‌های ابتدا و انتها\n    .trim();\n}\n\n/**\n * پاک‌سازی ویژه‌ی متن گوینده\n * این تابع فقط نشانه‌گذاری را اصلاح می‌کند؛\n * بازنویسی دستوری باید توسط LLM انجام شود.\n */\nfunction normalizeVoiceText(value) {\n  let text = normalizePersianText(value);\n\n  // نام پلتفرم X برای خواندن طبیعی‌تر\n  text = text.replace(\n    /(^|[\\s،؛])X(?=$|[\\s،؛.!؟])/g,\n    '$1ایکس'\n  );\n\n  // برخی مخفف‌های متداول برای TTS\n  const voiceReplacements = [\n    [/\\bAfD\\b/gi, 'آ اِف دِ'],\n    [/\\bCDU\\b/g, 'سِ دِ او'],\n    [/\\bCSU\\b/g, 'سِ اِس او'],\n    [/\\bSPD\\b/g, 'اِس پِ دِ'],\n    [/\\bFDP\\b/g, 'اِف دِ پِ'],\n    [/\\bEU\\b/g, 'اتحادیه اروپا'],\n    [/\\bNATO\\b/gi, 'ناتو'],\n  ];\n\n  for (const [pattern, replacement] of voiceReplacements) {\n    text = text.replace(pattern, replacement);\n  }\n\n  return text.trim();\n}\n\n/**\n * کنترل پایان طبیعی جمله\n */\nfunction ensureSentenceEnding(value) {\n  const text = String(value || '').trim();\n\n  if (!text) {\n    return text;\n  }\n\n  if (/[.!؟]$/.test(text)) {\n    return text;\n  }\n\n  return `${text}.`;\n}\n\n// اعتبارسنجی و پاک‌سازی هر صحنه\nconst normalizedScenes = data.scenes.map((scene, index) => ({\n  scene_number: index + 1,\n  duration: 20,\n  voice: scene.voice.trim(),\n  subtitle: scene.subtitle.trim(),\n  image_prompt: scene.image_prompt.trim(),\n}));\n\n// محاسبه مجموع زمان صحنه‌ها\nconst calculatedDuration = normalizedScenes.reduce(\n  (sum, scene) => sum + scene.duration,\n  0\n);\n\nif (calculatedDuration !== 60) {\n  throw new Error(\n    `Scene durations must total 60 seconds, but total is ${calculatedDuration}.`\n  );\n}\n\n// کنترل duration اصلی\nif (Number(data.duration) !== 60) {\n  throw new Error(\n    `Top-level duration must be 60, but received ${data.duration}.`\n  );\n}\n\nreturn [\n  {\n    json: {\n      title: normalizePersianText(data.title),\n      duration: 60,\n      scene_count: normalizedScenes.length,\n      calculated_duration: calculatedDuration,\n      validation_status: 'valid',\n      scenes: normalizedScenes,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -176
+      ],
+      "id": "e80e1f77-a9ca-44b0-90c8-818df2ed5e15",
+      "name": "ValidateStoryboard"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "scenes",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        928,
+        -176
+      ],
+      "id": "3a2f7b52-cb39-4e89-b42c-67ecfc5101df",
+      "name": "SplitScenes"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7a36c1bd-4ee7-4bec-a141-d54f9f5bfb56",
+              "name": "scene_number",
+              "value": "={{ $json.scene_number }}",
+              "type": "number"
+            },
+            {
+              "id": "f2d32519-6d8a-494c-b57a-9b18c596e6cc",
+              "name": "duration",
+              "value": "={{ $json.duration }}",
+              "type": "number"
+            },
+            {
+              "id": "a68b6152-f700-4875-8c4e-d84fe7188efe",
+              "name": "voice",
+              "value": "={{ $json.voice }}",
+              "type": "string"
+            },
+            {
+              "id": "bcceee1c-7c1d-4952-96ac-09633216cfbc",
+              "name": "subtitle",
+              "value": "={{ $json.subtitle }}",
+              "type": "string"
+            },
+            {
+              "id": "f4726f68-0e5c-42f1-9172-0bb2ec19fd36",
+              "name": "final_image_prompt",
+              "value": "={{ $json.image_prompt + \", realistic editorial news photography, cinematic lighting, professional composition, vertical 9:16 aspect ratio, no text, no subtitles, no logo, no watermark\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": "={{ false }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1152,
+        -176
+      ],
+      "id": "88894f7d-e899-4a03-a24b-6a79ac550ab8",
+      "name": "PrepareImagePrompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8188/prompt",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.comfy_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1824,
+        -176
+      ],
+      "id": "b8efb680-4c4e-45d1-9c26-41fc45759c1a",
+      "name": "GenerateImageWithComfyUI"
+    },
+    {
+      "parameters": {
+        "jsCode": "const workflow = {\n  \"4\": {\n    \"inputs\": {\n      \"ckpt_name\": \"juggernautXL_ragnarok.safetensors\"\n    },\n    \"class_type\": \"CheckpointLoaderSimple\"\n  },\n\n  \"5\": {\n    \"inputs\": {\n      \"width\": 768,\n      \"height\": 1344,\n      \"batch_size\": 1\n    },\n    \"class_type\": \"EmptyLatentImage\"\n  },\n\n  \"6\": {\n    \"inputs\": {\n      \"text\": $json.final_image_prompt,\n      \"clip\": [\"4\", 1]\n    },\n    \"class_type\": \"CLIPTextEncode\"\n  },\n\n  \"7\": {\n    \"inputs\": {\n      \"text\": \"text, watermark, logo, subtitles, blurry, low quality, distorted face, extra fingers\",\n      \"clip\": [\"4\", 1]\n    },\n    \"class_type\": \"CLIPTextEncode\"\n  },\n\n  \"3\": {\n    \"inputs\": {\n      \"seed\": Math.floor(Math.random() * 1000000000000000),\n      \"steps\": 25,\n      \"cfg\": 6,\n      \"sampler_name\": \"dpmpp_2m\",\n      \"scheduler\": \"karras\",\n      \"denoise\": 1,\n      \"model\": [\"4\", 0],\n      \"positive\": [\"6\", 0],\n      \"negative\": [\"7\", 0],\n      \"latent_image\": [\"5\", 0]\n    },\n    \"class_type\": \"KSampler\"\n  },\n\n  \"8\": {\n    \"inputs\": {\n      \"samples\": [\"3\", 0],\n      \"vae\": [\"4\", 2]\n    },\n    \"class_type\": \"VAEDecode\"\n  },\n\n  \"9\": {\n    \"inputs\": {\n      \"filename_prefix\": `News2Video-AI_scene_${$json.scene_number}`,\n      \"images\": [\"8\", 0]\n    },\n    \"class_type\": \"SaveImage\"\n  }\n};\n\nreturn [\n  {\n    json: {\n      ...$json,\n      comfy_payload: {\n        prompt: workflow,\n        client_id: `n8n-scene-${$json.scene_number}`\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -176
+      ],
+      "id": "520f52e5-39e1-4c91-bff2-f06d1662f7e6",
+      "name": "BuildComfyUIPayload"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:8188/history/' + $('GenerateImageWithComfyUI').item.json.prompt_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2272,
+        -176
+      ],
+      "id": "1c9de2ea-9874-42bc-bf22-b8256152a1d5",
+      "name": "GetComfyUIHistory",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const history = $json.history ?? {};\nconst promptId = $json.prompt_id;\n\nif (!promptId) {\n  throw new Error('ComfyUI prompt_id is missing.');\n}\n\nconst job = history[promptId];\n\nif (!job) {\n  throw new Error(\n    `No ComfyUI history entry found for prompt ID: ${promptId}`\n  );\n}\n\nif (job?.status?.completed !== true) {\n  throw new Error(\n    `ComfyUI job is not completed. Status: ${\n      job?.status?.status_str ?? 'unknown'\n    }`\n  );\n}\n\nlet image = null;\nlet outputNodeId = null;\n\nfor (const [nodeId, output] of Object.entries(job.outputs ?? {})) {\n  if (Array.isArray(output.images) && output.images.length > 0) {\n    image = output.images[0];\n    outputNodeId = nodeId;\n    break;\n  }\n}\n\nif (!image) {\n  throw new Error('No generated image found in ComfyUI outputs.');\n}\n\nconst baseUrl = 'http://127.0.0.1:8188';\n\nconst filename = image.filename;\nconst subfolder = image.subfolder ?? '';\nconst fileType = image.type ?? 'output';\n\nreturn [\n  {\n    json: {\n      prompt_id: promptId,\n      output_node_id: outputNodeId,\n      filename,\n      subfolder,\n      file_type: fileType,\n      poll_attempt: $json.poll_attempt,\n      image_url:\n        `${baseUrl}/view` +\n        `?filename=${encodeURIComponent(filename)}` +\n        `&subfolder=${encodeURIComponent(subfolder)}` +\n        `&type=${encodeURIComponent(fileType)}`,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2944,
+        -400
+      ],
+      "id": "8124e656-f46a-4a95-aba2-b41d27d46f5e",
+      "name": "ExtractComfyUIImage"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.image_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3168,
+        -400
+      ],
+      "id": "7f7e866d-04e1-4e83-858b-8539d4b3c488",
+      "name": "DownloadGeneratedImage"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst source = $('PrepareImagePrompt').item.json;\n\nconst executionId = String($execution.id);\nconst executionFolder =\n  `C:\\\\News2Video-AI\\\\temp\\\\execution_${executionId}`;\n\nconst sceneNumber = Number(source.scene_number);\n\nif (!sceneNumber) {\n  throw new Error('scene_number is missing.');\n}\n\n// ساخت پوشه، اگر هنوز وجود ندارد\nfs.mkdirSync(executionFolder, {\n  recursive: true,\n});\n\nreturn [\n  {\n    json: {\n      scene_number: sceneNumber,\n      duration: source.duration,\n      voice: source.voice,\n      subtitle: source.subtitle,\n      final_image_prompt: source.final_image_prompt,\n\n      execution_id: executionId,\n      execution_folder: executionFolder,\n\n      image_path:\n        `${executionFolder}\\\\scene_${sceneNumber}.png`,\n\n      audio_path:\n        `${executionFolder}\\\\scene_${sceneNumber}_voice.mp3`,\n\n      video_path:\n        `${executionFolder}\\\\scene_${sceneNumber}.mp4`,\n\n      prompt_id:\n        $('ExtractComfyUIImage').item.json.prompt_id,\n\n      filename:\n        $('ExtractComfyUIImage').item.json.filename,\n    },\n\n    // نگه‌داشتن فایل تصویر دانلودشده\n    binary: $binary,\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        -400
+      ],
+      "id": "9aa3e3cb-8333-4dbd-bd00-b8cb4f6af792",
+      "name": "AttachSceneMetadata"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1376,
+        -176
+      ],
+      "id": "51731e93-5555-4a4b-aef3-a78dc5ee6620",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3168,
+        16
+      ],
+      "id": "0641b77c-db92-492c-b097-853f343992ed",
+      "name": "WaitBeforeHistoryCheck",
+      "webhookId": "f5dcb0ab-58fa-4349-bd4f-056979aea8a8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const history = $json ?? {};\n\nconst promptId =\n  $('GenerateImageWithComfyUI').item.json.prompt_id;\n\nif (!promptId) {\n  throw new Error('ComfyUI prompt_id is missing.');\n}\n\n// دریافت تلاش قبلی از چرخه Polling\nlet previousAttempt = 0;\n\ntry {\n  previousAttempt =\n    Number($('CheckComfyUIStatus').item.json.poll_attempt) || 0;\n} catch (error) {\n  previousAttempt = 0;\n}\n\nconst pollAttempt = previousAttempt + 1;\n\n// دقیقاً Job مربوط به همین prompt را بررسی می‌کنیم\nconst job = history[promptId];\n\n// History هنوز آماده نیست\nif (!job) {\n  return [\n    {\n      json: {\n        completed: false,\n        failed: false,\n        status: 'waiting',\n        poll_attempt: pollAttempt,\n        prompt_id: promptId,\n        history,\n      },\n    },\n  ];\n}\n\nconst status =\n  job?.status?.status_str ?? 'unknown';\n\nconst completed =\n  job?.status?.completed === true;\n\nconst failed =\n  status === 'error' ||\n  status === 'failed';\n\n// جزئیات خطای احتمالی ComfyUI\nconst messages =\n  Array.isArray(job?.status?.messages)\n    ? job.status.messages\n    : [];\n\nreturn [\n  {\n    json: {\n      completed,\n      failed,\n      status,\n      poll_attempt: pollAttempt,\n      prompt_id: promptId,\n      history,\n      status_messages: messages,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        -256
+      ],
+      "id": "b9c3eeb3-bfbf-4b93-9bcb-a8f38282e08b",
+      "name": "CheckComfyUIStatus"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "be13e23d-3dbd-40d0-b8ae-4c10784c9e8c",
+              "leftValue": "={{ $json.completed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2720,
+        -256
+      ],
+      "id": "944c2669-9807-4f69-a682-886bd3717b66",
+      "name": "IsComfyUICompleted"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "78284406-d528-45cf-8f68-0fff7af4e0b2",
+              "leftValue": "={{ $json.poll_attempt }}",
+              "rightValue": 24,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2944,
+        -160
+      ],
+      "id": "fd1b7f5a-6070-4742-97d1-ffa090a026bf",
+      "name": "ComfyUITimeout"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error(\n  `ComfyUI did not complete the image after ${$json.poll_attempt} checks. ` +\n  `Prompt ID: ${$json.prompt_id}, last status: ${$json.status}`\n);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        -208
+      ],
+      "id": "59f70915-6189-490f-8d7c-2d594b7ba638",
+      "name": "ThrowComfyUITimeout"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        -176
+      ],
+      "id": "bb9f6604-2980-4084-a054-3f7309be1f74",
+      "name": "WaitBeforeHistoryCheck1",
+      "webhookId": "f5dcb0ab-58fa-4349-bd4f-056979aea8a8"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.tts_command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        4064,
+        -400
+      ],
+      "id": "3b8480a5-2a87-4166-a528-263204e82c4f",
+      "name": "GeneratePersianVoice"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sceneNumber = Number($json.scene_number);\nconst voiceText = String($json.voice || '').trim();\n\nif (!sceneNumber) {\n  throw new Error('scene_number is missing.');\n}\n\nif (!voiceText) {\n  throw new Error(`Scene ${sceneNumber}: voice text is empty.`);\n}\n\nconst pythonPath =\n  'C:\\\\Users\\\\USERNAME\\\\AppData\\\\Local\\\\Comfy-Desktop\\\\' +\n  'ComfyUI-Installs\\\\Comfy UI\\\\ComfyUI\\\\.venv\\\\Scripts\\\\python.exe';\n\nconst scriptPath =\n  'C:\\\\News2Video-AI\\\\scripts\\\\tts.py';\n\nconst audioPath = $json.audio_path;\n\nif (!audioPath) {\n  throw new Error(`Scene ${sceneNumber}: audio_path is missing.`);\n}\n\nconst textBase64 = Buffer\n  .from(voiceText, 'utf8')\n  .toString('base64');\n\nconst command =\n  `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ` +\n  `\"& '${pythonPath}' ` +\n  `'${scriptPath}' ` +\n  `--text-base64 '${textBase64}' ` +\n  `--output '${audioPath}' ` +\n  `--voice 'fa-IR-FaridNeural' ` +\n  `--rate=-5% ` +\n  `--pitch=-2Hz\"`;  \n\nreturn [\n  {\n    json: {\n      ...$json,\n      text_base64: textBase64,\n      tts_command: command,\n    },\n    binary: $binary,\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        -400
+      ],
+      "id": "ff017b62-fc89-4249-a5fa-53118f3079f9",
+      "name": "PrepareTTSCommand"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.image_path }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        3616,
+        -400
+      ],
+      "id": "0075b3a0-8267-4942-a894-2e8b82ea94d1",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst source = $('PrepareTTSCommand').item.json;\n\nconst sceneNumber = Number(source.scene_number);\nconst subtitle = String(source.subtitle || '').trim();\n\nconst pythonPath =\n  'C:\\\\Users\\\\USERNAME\\\\AppData\\\\Local\\\\Comfy-Desktop\\\\' +\n  'ComfyUI-Installs\\\\Comfy UI\\\\ComfyUI\\\\.venv\\\\Scripts\\\\python.exe';\n\nconst scriptPath =\n  'C:\\\\News2Video-AI\\\\scripts\\\\video_engine.py';\n\nconst imagePath = source.image_path;\nconst audioPath = source.audio_path;\nconst videoPath = source.video_path;\n\n// Debug\nif (!fs.existsSync(pythonPath)) {\n  throw new Error(`Python not found: ${pythonPath}`);\n}\n\nif (!fs.existsSync(scriptPath)) {\n  throw new Error(`video_engine.py not found: ${scriptPath}`);\n}\n\nif (!fs.existsSync(imagePath)) {\n  throw new Error(`Image not found: ${imagePath}`);\n}\n\nif (!fs.existsSync(audioPath)) {\n  throw new Error(`Audio not found: ${audioPath}`);\n}\n\nconst subtitleBase64 = Buffer\n  .from(subtitle, 'utf8')\n  .toString('base64');\n\n// مستقیم Python اجرا می‌شود؛ PowerShell حذف شد\nconst command =\n  `\"${pythonPath}\" ` +\n  `\"${scriptPath}\" ` +\n  `render-scene ` +\n  `--image \"${imagePath}\" ` +\n  `--audio \"${audioPath}\" ` +\n  `--output \"${videoPath}\" ` +\n  `--subtitle-base64 \"${subtitleBase64}\" ` +\n  `--width 1080 ` +\n  `--height 1920 ` +\n  `--fps 30`;\n\nreturn [\n  {\n    json: {\n      ...source,\n      subtitle_base64: subtitleBase64,\n      render_command: command,\n\n      debug: {\n        python_exists: fs.existsSync(pythonPath),\n        script_exists: fs.existsSync(scriptPath),\n        image_exists: fs.existsSync(imagePath),\n        audio_exists: fs.existsSync(audioPath),\n        image_path: imagePath,\n        audio_path: audioPath,\n        video_path: videoPath,\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4288,
+        -400
+      ],
+      "id": "433d951a-86d6-4301-8af8-b4fce7135162",
+      "name": "PrepareRenderSceneCommand"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.render_command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        4512,
+        -400
+      ],
+      "id": "21ac7aa9-cf5a-4e58-919d-be9b95bce914",
+      "name": "RenderSceneVideo",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('PrepareRenderSceneCommand').item.json;\n\nif ($json.exitCode !== 0) {\n  throw new Error(\n    `FFmpeg render failed for scene ${source.scene_number}.\\n` +\n    `stderr: ${$json.stderr || 'no stderr'}`\n  );\n}\n\nreturn [\n  {\n    json: {\n      ...source,\n      render_exit_code: $json.exitCode,\n      render_stdout: $json.stdout,\n      render_stderr: $json.stderr,\n      render_status: 'success',\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4736,
+        -112
+      ],
+      "id": "4ee88c96-abd7-4a53-b4c5-e742dead73b8",
+      "name": "ValidateRenderedScene"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require(\"fs\");\n\nconst executionFolder =\n`C:\\\\News2Video-AI\\\\temp\\\\execution_${$execution.id}`;\n\nconst listFile =\n`${executionFolder}\\\\concat.txt`;\n\nconst finalVideo =\n`${executionFolder}\\\\final_video.mp4`;\n\nconst content = [\n\"file 'scene_1.mp4'\",\n\"file 'scene_2.mp4'\",\n\"file 'scene_3.mp4'\"\n].join(\"\\r\\n\");\n\nfs.writeFileSync(\nlistFile,\ncontent,\n\"utf8\"\n);\n\nconst command =\n`\"C:\\\\ffmpeg\\\\bin\\\\ffmpeg.exe\" -y -f concat -safe 0 ` +\n`-i \"${listFile}\" ` +\n`-c copy ` +\n`\"${finalVideo}\"`;\n\nreturn [{\njson:{\nexecution_folder:executionFolder,\nconcat_file:listFile,\nfinal_video:finalVideo,\nmerge_command:command\n}\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        -592
+      ],
+      "id": "129c7276-927d-433c-b308-0b7a10b092da",
+      "name": "BuildConcatCommand"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.merge_command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        -592
+      ],
+      "id": "961f72b8-a402-48d3-9038-4b40b47accda",
+      "name": "MergeVideos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\n// خروجی Execute Command\nconst mergeResult = $json;\n\n// مسیر فایل از Node قبلی گرفته می‌شود\nconst source = $('BuildConcatCommand').first().json;\n\nconst finalVideo = source.final_video;\n\nif (mergeResult.exitCode !== 0) {\n  throw new Error(\n    `FFmpeg merge failed.\\n` +\n    `Exit code: ${mergeResult.exitCode}\\n` +\n    `stderr: ${mergeResult.stderr || 'No stderr output'}`\n  );\n}\n\nif (\n  typeof finalVideo !== 'string' ||\n  finalVideo.trim() === ''\n) {\n  throw new Error(\n    'final_video path is missing in BuildConcatCommand.'\n  );\n}\n\nif (!fs.existsSync(finalVideo)) {\n  throw new Error(\n    `Final video was not created:\\n${finalVideo}`\n  );\n}\n\nconst size = fs.statSync(finalVideo).size;\n\nif (size < 100000) {\n  throw new Error(\n    `Final video looks invalid. File size: ${size} bytes`\n  );\n}\n\nreturn [\n  {\n    json: {\n      status: 'success',\n\n      execution_id: source.execution_id,\n      execution_folder: source.execution_folder,\n\n      final_video: finalVideo,\n\n      size_bytes: size,\n      size_mb: Number(\n        (size / 1024 / 1024).toFixed(2)\n      ),\n\n      merge_exit_code: mergeResult.exitCode,\n      merge_stdout: mergeResult.stdout,\n      merge_stderr: mergeResult.stderr,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        -592
+      ],
+      "id": "621e0a09-b561-44d0-97c1-a99c1c6b940f",
+      "name": "ValidateFinalVideo"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.final_video }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        3616,
+        -592
+      ],
+      "id": "e21b050d-b138-4a98-8ef5-d6163513709b",
+      "name": "ReadFinalVideo"
+    },
+    {
+      "parameters": {
+        "operation": "sendVideo",
+        "chatId": "-1004481078210",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "={{ \"🎥 \" + $('ValidateStoryboard').first().json.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3840,
+        -592
+      ],
+      "id": "ec3e0713-46a8-449b-97d2-239ddf02b1e4",
+      "name": "SendFinalVideo",
+      "webhookId": "b1c4ede4-2c10-4a8f-bfbf-5f1a9d1fc0af",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_TELEGRAM_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst source = $('ValidateCompleteVideo').first().json;\n\nconst executionFolder = source.execution_folder;\nconst finalVideo = source.final_video;\n\nif (!executionFolder) {\n  throw new Error('execution_folder is missing.');\n}\n\nif (!fs.existsSync(executionFolder)) {\n  return [\n    {\n      json: {\n        cleanup_status: 'skipped',\n        reason: 'Execution folder does not exist.',\n        execution_folder: executionFolder,\n      },\n    },\n  ];\n}\n\n// فعلاً فایل نهایی را نگه می‌داریم\nconst keepFiles = new Set([\n  path.basename(finalVideo),\n]);\n\nconst deletedFiles = [];\nconst keptFiles = [];\n\nfor (const entry of fs.readdirSync(executionFolder)) {\n  const fullPath = path.join(executionFolder, entry);\n\n  if (keepFiles.has(entry)) {\n    keptFiles.push(fullPath);\n    continue;\n  }\n\n  const stats = fs.statSync(fullPath);\n\n  if (stats.isFile()) {\n    fs.unlinkSync(fullPath);\n    deletedFiles.push(fullPath);\n  }\n}\n\nreturn [\n  {\n    json: {\n      cleanup_status: 'success',\n      execution_folder: executionFolder,\n      deleted_count: deletedFiles.length,\n      deleted_files: deletedFiles,\n      kept_files: keptFiles,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4064,
+        -592
+      ],
+      "id": "b8b96051-6380-4d72-894e-4dd142900dfd",
+      "name": "CleanupExecutionFolder"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst source = $('ValidateFinalVideo').first().json;\n\nconst inputVideo = source.final_video;\n\nconst musicPath =\n  'C:\\\\News2Video-AI\\\\assets\\\\background_music.mp3';\n\nconst outputVideo = path.join(\n  source.execution_folder,\n  'final_video_music.mp4'\n);\n\nif (!fs.existsSync(inputVideo)) {\n  throw new Error(`Input video not found: ${inputVideo}`);\n}\n\nif (!fs.existsSync(musicPath)) {\n  throw new Error(`Background music not found: ${musicPath}`);\n}\n\nconst command =\n  `\"C:\\\\ffmpeg\\\\bin\\\\ffmpeg.exe\" -y ` +\n  `-i \"${inputVideo}\" ` +\n  `-stream_loop -1 -i \"${musicPath}\" ` +\n  `-filter_complex \"` +\n  `[1:a]volume=0.08[music];` +\n  `[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]` +\n  `\" ` +\n  `-map 0:v:0 ` +\n  `-map \"[aout]\" ` +\n  `-c:v copy ` +\n  `-c:a aac ` +\n  `-b:a 192k ` +\n  `-shortest ` +\n  `-movflags +faststart ` +\n  `\"${outputVideo}\"`;\n\nreturn [\n  {\n    json: {\n      ...source,\n      background_music: musicPath,\n      final_video_without_music: inputVideo,\n      final_video: outputVideo,\n      music_command: command,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        -592
+      ],
+      "id": "838c5751-be03-4975-9ce5-0a0281a3f296",
+      "name": "BuildMusicCommand"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.music_command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2496,
+        -592
+      ],
+      "id": "ac2f6911-481d-4894-9da5-c8a9e7e348d2",
+      "name": "AddBackgroundMusic"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst source = $('BuildMusicCommand').first().json;\n\nif ($json.exitCode !== 0) {\n  throw new Error(\n    `FFmpeg music mix failed.\\n` +\n    `stderr: ${$json.stderr || 'No stderr'}`\n  );\n}\n\nconst finalVideo = source.final_video;\n\nif (!fs.existsSync(finalVideo)) {\n  throw new Error(\n    `Video with music was not created: ${finalVideo}`\n  );\n}\n\nconst size = fs.statSync(finalVideo).size;\n\nif (size < 100000) {\n  throw new Error(\n    `Video with music looks invalid: ${size} bytes`\n  );\n}\n\nreturn [\n  {\n    json: {\n      ...source,\n      status: 'success',\n      final_video_size_bytes: size,\n      final_video_size_mb:\n        Number((size / 1024 / 1024).toFixed(2)),\n      music_exit_code: $json.exitCode,\n      music_stderr: $json.stderr,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        -592
+      ],
+      "id": "559285ff-ab2f-4ced-a725-097ff18b0f3d",
+      "name": "ValidateVideoWithMusic"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst source = $('ValidateVideoWithMusic').first().json;\n\nconst mainVideo = source.final_video;\n\nconst introVideo =\n  'C:\\\\News2Video-AI\\\\assets\\\\intro.mp4';\n\nconst outroVideo =\n  'C:\\\\News2Video-AI\\\\assets\\\\outro.mp4';\n\nconst outputVideo = path.join(\n  source.execution_folder,\n  'final_video_complete.mp4'\n);\n\nif (!fs.existsSync(mainVideo)) {\n  throw new Error(\n    `Main video not found: ${mainVideo}`\n  );\n}\n\nif (!fs.existsSync(introVideo)) {\n  throw new Error(\n    `Intro video not found: ${introVideo}`\n  );\n}\n\nif (!fs.existsSync(outroVideo)) {\n  throw new Error(\n    `Outro video not found: ${outroVideo}`\n  );\n}\n\nconst command =\n  `\"C:\\\\ffmpeg\\\\bin\\\\ffmpeg.exe\" -y ` +\n  `-i \"${introVideo}\" ` +\n  `-i \"${mainVideo}\" ` +\n  `-i \"${outroVideo}\" ` +\n  `-filter_complex \"` +\n\n  `[0:v]scale=1080:1920,fps=30,setsar=1[v0];` +\n  `[1:v]scale=1080:1920,fps=30,setsar=1[v1];` +\n  `[2:v]scale=1080:1920,fps=30,setsar=1[v2];` +\n\n  `[0:a]aresample=48000[a0];` +\n  `[1:a]aresample=48000[a1];` +\n  `[2:a]aresample=48000[a2];` +\n\n  `[v0][a0][v1][a1][v2][a2]` +\n  `concat=n=3:v=1:a=1[vout][aout]` +\n\n  `\" ` +\n  `-map \"[vout]\" ` +\n  `-map \"[aout]\" ` +\n  `-c:v libx264 ` +\n  `-preset medium ` +\n  `-crf 20 ` +\n  `-c:a aac ` +\n  `-b:a 192k ` +\n  `-movflags +faststart ` +\n  `\"${outputVideo}\"`;\n\nreturn [\n  {\n    json: {\n      ...source,\n\n      intro_video: introVideo,\n      outro_video: outroVideo,\n\n      final_video_before_intro_outro: mainVideo,\n      final_video: outputVideo,\n\n      intro_outro_command: command,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2944,
+        -592
+      ],
+      "id": "5695ba91-545a-49c7-8121-994eb28fcee3",
+      "name": "BuildIntroOutroCommand"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.intro_outro_command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        -592
+      ],
+      "id": "7a7c8c36-6be0-464d-9760-a390aaefb4d6",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst source =\n  $('BuildIntroOutroCommand').first().json;\n\nif ($json.exitCode !== 0) {\n  throw new Error(\n    `FFmpeg Intro/Outro failed.\\n` +\n    `Exit code: ${$json.exitCode}\\n` +\n    `stderr: ${$json.stderr || 'No stderr'}`\n  );\n}\n\nconst finalVideo = source.final_video;\n\nif (\n  typeof finalVideo !== 'string' ||\n  finalVideo.trim() === ''\n) {\n  throw new Error(\n    'Final complete video path is missing.'\n  );\n}\n\nif (!fs.existsSync(finalVideo)) {\n  throw new Error(\n    `Complete video was not created:\\n${finalVideo}`\n  );\n}\n\nconst size = fs.statSync(finalVideo).size;\n\nif (size < 100000) {\n  throw new Error(\n    `Complete video looks invalid: ${size} bytes`\n  );\n}\n\nreturn [\n  {\n    json: {\n      ...source,\n\n      status: 'success',\n\n      final_video: finalVideo,\n\n      final_video_size_bytes: size,\n      final_video_size_mb:\n        Number((size / 1024 / 1024).toFixed(2)),\n\n      intro_outro_exit_code: $json.exitCode,\n      intro_outro_stderr: $json.stderr,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        -592
+      ],
+      "id": "423bf5c8-9835-4f38-8b70-a2bfaccb4e9b",
+      "name": "ValidateCompleteVideo"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "german-news-video",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -192,
+        -176
+      ],
+      "id": "4cbc5c2f-609d-4033-933d-8666d65734a6",
+      "name": "ReceiveNewsFromHost",
+      "webhookId": "768f10ef-9be0-40c4-ac08-e581e8259dc2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body ?? $json;\n\nconst titleFa =\n  String(input.title_fa || '').trim();\n\nconst shortSummaryFa =\n  String(input.short_summary_fa || '').trim();\n\nconst teaserFa =\n  String(input.teaser_fa || '').trim();\n\nconst link =\n  String(input.link || '').trim();\n\nconst source =\n  String(\n    input.source_name ||\n    input.sourceFeed ||\n    input.sourceHost ||\n    ''\n  ).trim();\n\nconst importance =\n  Number(input.importance || 0);\n\nif (!titleFa) {\n  throw new Error('title_fa is missing');\n}\n\nif (!teaserFa && !shortSummaryFa) {\n  throw new Error('No Persian news content received');\n}\n\nreturn [\n  {\n    json: {\n      title_fa: titleFa,\n      short_summary_fa: shortSummaryFa,\n      teaser_fa: teaserFa,\n      link,\n      source,\n      importance,\n\n      video_news_text: [\n        `عنوان: ${titleFa}`,\n        shortSummaryFa\n          ? `خلاصه: ${shortSummaryFa}`\n          : '',\n        teaserFa\n          ? `متن خبر: ${teaserFa}`\n          : '',\n        source\n          ? `منبع: ${source}`\n          : '',\n      ]\n        .filter(Boolean)\n        .join('\\n\\n')\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -176
+      ],
+      "id": "9244a0dc-1f6f-4740-a79c-fd9fbbf11b59",
+      "name": "Prepare Video News"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    model: \"gemma3:12b\",\n    messages: [\n      {\n        role: \"user\",\n        content: `You are an AI video editor and professional Persian news scriptwriter.\n\nCreate a 60-second storyboard based only on the supplied news.\n\nNEWS:\n\n${$json.video_news_text}\n\nGENERAL REQUIREMENTS:\n\n- Create exactly 3 scenes.\n- Each scene must have a duration of exactly 20 seconds.\n- The total duration must be exactly 60 seconds.\n- Write title, voice and subtitle in fluent contemporary Persian.\n- Write image_prompt only in English.\n- Use only facts explicitly contained in the supplied news.\n- Do not invent, assume, complete or modify any facts.\n- Preserve all names, positions, numbers, dates, ages, percentages and locations accurately.\n- Never replace an unknown number or date with a guessed value.\n- Do not translate German sentence structures literally.\n- Return only valid JSON matching the supplied schema.\n- Do not use Markdown.\n- Do not write anything before or after the JSON.\n\nSTRICT SOURCE FIDELITY:\n\n- Every sentence must be directly supported by the supplied news.\n- Do not introduce any person who is not explicitly named in the news.\n- Do not introduce ministers, officials, experts, witnesses or organizations that are absent from the news.\n- Do not add reactions, investigations, expectations, predictions or future consequences unless explicitly stated in the news.\n- Do not add generic filler statements.\n- Never write «مقامات در حال بررسی هستند» unless the source explicitly says so.\n- Never write «اطلاعات بیشتری منتشر خواهد شد» unless the source explicitly says so.\n- Never write «کارشناسان معتقدند» unless experts are explicitly quoted in the source.\n- Never write «انتظار می‌رود وضعیت بهبود یابد» unless this expectation exists in the source.\n- If the source contains only a few facts, divide those same facts across the three scenes without inventing information.\n- Careful reformulation or limited repetition is preferable to fabrication.\n- Copy every person’s role and professional position exactly from the source.\n- Never change «مدیر ارشد» into «مدیرعامل».\n- Before returning JSON, compare every person, position, claim and event against the supplied news.\n- Remove every statement that cannot be verified directly from the supplied news.\n\nVOICE RULES:\n\nVOICE RULES:\n\n- The voice field is written specifically for Persian text-to-speech.\n- Write like a professional Persian television news presenter.\n- Use fluent, natural and grammatically correct Persian.\n- Write short, complete and easy-to-understand sentences.\n- Prefer one main idea per sentence.\n- Avoid long sentences containing several dependent clauses.\n- Avoid unnecessarily formal, literary or old-fashioned language.\n- Put Persian verbs in their natural grammatical position.\n- Do not repeat the same information.\n- Each voice text should contain approximately 40 to 55 Persian words.\n- Each voice text must be suitable for approximately 20 seconds of narration.\n- The three voice texts should have approximately similar lengths.\n\nVOICE PUNCTUATION AND PAUSES:\n\n- Use the Persian comma «،» only for a short natural speaking pause.\n- Do not place a comma after every phrase.\n- Split long sentences with a full stop instead of using too many commas.\n- Use «؛» only when a clear medium-length pause is necessary.\n- Use the Persian question mark «؟» for questions.\n- Never use the English comma \",\" or English question mark \"?\".\n- Never place a space before «،», «؛», «.» or «؟».\n- Place exactly one space after punctuation.\n- End every complete sentence with a full stop or Persian question mark.\n- Add punctuation wherever it is needed to prevent ambiguity when spoken.\n\nNUMBER, DATE AND AGE RULES:\n\n- Copy every number, year, date, age and percentage exactly from the supplied news.\n- Never change, shorten, approximate or guess a number.\n- Never replace a year with another year.\n- Never convert an unclear number into an invented Persian expression.\n- Write numbers in Persian words in the voice field.\n- Write years as complete natural Persian expressions.\n- Write ages as complete Persian expressions.\n- Write dates in an unambiguous spoken form.\n- Write percentages in an unambiguous spoken form.\n- Keep all numerical values unchanged in meaning.\n\nExamples:\n\n- 84 years old:\n  «هشتاد و چهار ساله»\n\n- The year 1995:\n  «سال هزار و نهصد و نود و پنج میلادی»\n\n- The year 2021:\n  «سال دو هزار و بیست‌ویک»\n\n- 18 June 2021:\n  «هجدهم ژوئن سال دو هزار و بیست‌ویک»\n\n- One day after:\n  «یک روز پس از آن»\n\n- 2.5 percent:\n  «دو و نیم درصد»\n\nIMPORTANT DATE PUNCTUATION EXAMPLE:\n\nWrong:\n«در هجده ژوئن دو هزار و بیست و یک روز پس از تأیید حکم»\n\nCorrect:\n«در هجدهم ژوئن سال دو هزار و بیست‌ویک، یک روز پس از تأیید حکم»\n\nThe comma after the year is mandatory when another number follows it.\n\nVOICE PRONUNCIATION:\n\n- Write foreign names in Persian script in the voice field.\n- Write German names in a form that Persian TTS can pronounce naturally.\n- Write abbreviations phonetically for Persian speech.\n- Write «آ اِف دِ» instead of “AfD”.\n- Write «سِ دِ او» instead of “CDU”.\n- Write «سِ اِس او» instead of “CSU”.\n- Write «اِس پِ دِ» instead of “SPD”.\n- Write «اِف دِ پِ» instead of “FDP”.\n- Write «ایکس» instead of “X” when referring to the social platform.\n- Do not use parentheses, slashes, hashtags or unexplained abbreviations in voice.\n\nSUBTITLE RULES:\n\n- The subtitle must preserve exactly the same facts as the voice.\n- Write the subtitle in correct, fluent and formal Persian.\n- Keep numbers, dates and names accurate.\n- The subtitle may use Persian digits for numbers.\n- Do not add phonetic pronunciation marks solely for the speaker.\n- Use Persian punctuation and correct spacing.\n- Use Persian «ی» and «ک», not Arabic «ي» and «ك».\n- Use correct نیم‌فاصله in Persian compound words.\n- Keep the subtitle concise and suitable for a vertical video.\n- The subtitle and voice may be worded differently, but their factual meaning must be identical.\n\nIMAGE PROMPT RULES:\n\n- Write image_prompt only in English.\n- Describe one realistic news-style visual for each scene.\n- Do not request visible text, captions, logos or watermarks.\n- Do not invent unsupported people, locations or events.\n- Do not portray an unspecified person as a specific real individual.\n- When the news concerns a real person, prefer a neutral documentary setting unless the supplied news explicitly describes the scene.\n\nFINAL VALIDATION:\n\nBefore returning the JSON, verify all of the following:\n\n- Exactly 3 scenes exist.\n- Every scene duration is exactly 20.\n- Total duration is exactly 60.\n- All names match the source.\n- All numbers match the source.\n- All dates match the source.\n- All ages match the source.\n- No year has been changed or invented.\n- Voice text uses natural Persian grammar.\n- Voice punctuation produces natural speaking pauses.\n- Every voice text has approximately 40 to 55 Persian words.\n- Voice contains no unexplained Latin abbreviations.\n- Subtitle and voice preserve the same facts.\n- No information has been invented.\n- The response contains only valid JSON.`\n      }\n    ],\n    stream: false,\n    think: false,\n    keep_alive: 0,\n    format: {\n      type: \"object\",\n      properties: {\n        title: {\n          type: \"string\"\n        },\n        duration: {\n          type: \"integer\",\n          enum: [60]\n        },\n        scenes: {\n          type: \"array\",\n          minItems: 3,\n          maxItems: 3,\n          items: {\n            type: \"object\",\n            properties: {\n              duration: {\n                type: \"integer\",\n                enum: [20]\n              },\n              voice: {\n                type: \"string\"\n              },\n              subtitle: {\n                type: \"string\"\n              },\n              image_prompt: {\n                type: \"string\"\n              }\n            },\n            required: [\n              \"duration\",\n              \"voice\",\n              \"subtitle\",\n              \"image_prompt\"\n            ]\n          }\n        }\n      },\n      required: [\n        \"title\",\n        \"duration\",\n        \"scenes\"\n      ]\n    }\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        256,
+        -176
+      ],
+      "id": "0d5eda88-2f65-466d-85f0-d8df91efa8fa",
+      "name": "GenerateStoryboardWithOllama"
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $json.message?.content;\n\nif (!content || typeof content !== 'string') {\n  throw new Error(\n    'Ollama response does not contain message.content.'\n  );\n}\n\nlet storyboard;\n\ntry {\n  storyboard = JSON.parse(content);\n} catch (error) {\n  throw new Error(\n    `Ollama returned invalid JSON: ${error.message}\\n\\n` +\n    `Raw content:\\n${content}`\n  );\n}\n\nif (\n  !storyboard ||\n  typeof storyboard !== 'object' ||\n  Array.isArray(storyboard)\n) {\n  throw new Error(\n    'Parsed Ollama storyboard is not a valid object.'\n  );\n}\n\nreturn [\n  {\n    json: storyboard,\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -176
+      ],
+      "id": "781411b5-941b-446c-a285-f37021adad6e",
+      "name": "ParseOllamaStoryboard"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "ValidateStoryboard": {
+      "main": [
+        [
+          {
+            "node": "SplitScenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitScenes": {
+      "main": [
+        []
+      ]
+    },
+    "PrepareImagePrompt": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildComfyUIPayload": {
+      "main": [
+        [
+          {
+            "node": "GenerateImageWithComfyUI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenerateImageWithComfyUI": {
+      "main": [
+        [
+          {
+            "node": "WaitBeforeHistoryCheck1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetComfyUIHistory": {
+      "main": [
+        [
+          {
+            "node": "CheckComfyUIStatus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ExtractComfyUIImage": {
+      "main": [
+        [
+          {
+            "node": "DownloadGeneratedImage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DownloadGeneratedImage": {
+      "main": [
+        [
+          {
+            "node": "AttachSceneMetadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AttachSceneMetadata": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "BuildConcatCommand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "BuildComfyUIPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WaitBeforeHistoryCheck": {
+      "main": [
+        [
+          {
+            "node": "GetComfyUIHistory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CheckComfyUIStatus": {
+      "main": [
+        [
+          {
+            "node": "IsComfyUICompleted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IsComfyUICompleted": {
+      "main": [
+        [
+          {
+            "node": "ExtractComfyUIImage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ComfyUITimeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ComfyUITimeout": {
+      "main": [
+        [
+          {
+            "node": "ThrowComfyUITimeout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WaitBeforeHistoryCheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ThrowComfyUITimeout": {
+      "main": [
+        []
+      ]
+    },
+    "WaitBeforeHistoryCheck1": {
+      "main": [
+        [
+          {
+            "node": "GetComfyUIHistory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GeneratePersianVoice": {
+      "main": [
+        [
+          {
+            "node": "PrepareRenderSceneCommand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepareTTSCommand": {
+      "main": [
+        [
+          {
+            "node": "GeneratePersianVoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "PrepareTTSCommand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PrepareRenderSceneCommand": {
+      "main": [
+        [
+          {
+            "node": "RenderSceneVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RenderSceneVideo": {
+      "main": [
+        [
+          {
+            "node": "ValidateRenderedScene",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ValidateRenderedScene": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildConcatCommand": {
+      "main": [
+        [
+          {
+            "node": "MergeVideos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeVideos": {
+      "main": [
+        [
+          {
+            "node": "ValidateFinalVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ValidateFinalVideo": {
+      "main": [
+        [
+          {
+            "node": "BuildMusicCommand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReadFinalVideo": {
+      "main": [
+        [
+          {
+            "node": "SendFinalVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendFinalVideo": {
+      "main": [
+        [
+          {
+            "node": "CleanupExecutionFolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CleanupExecutionFolder": {
+      "main": [
+        []
+      ]
+    },
+    "BuildMusicCommand": {
+      "main": [
+        [
+          {
+            "node": "AddBackgroundMusic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AddBackgroundMusic": {
+      "main": [
+        [
+          {
+            "node": "ValidateVideoWithMusic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ValidateVideoWithMusic": {
+      "main": [
+        [
+          {
+            "node": "BuildIntroOutroCommand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildIntroOutroCommand": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "ValidateCompleteVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ValidateCompleteVideo": {
+      "main": [
+        [
+          {
+            "node": "ReadFinalVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReceiveNewsFromHost": {
+      "main": [
+        [
+          {
+            "node": "Prepare Video News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Video News": {
+      "main": [
+        [
+          {
+            "node": "GenerateStoryboardWithOllama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GenerateStoryboardWithOllama": {
+      "main": [
+        [
+          {
+            "node": "ParseOllamaStoryboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ParseOllamaStoryboard": {
+      "main": [
+        [
+          {
+            "node": "ValidateStoryboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ee43bacc-8651-4a1f-a675-1d26c6f4c996",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "evHljOUU0oRZGmOC",
+  "tags": []
+}
