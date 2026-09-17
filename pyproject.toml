@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "news2video-ai"
+version = "0.1.0"
+description = "An AI-assisted pipeline for turning news stories into Persian vertical videos."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Seyedali Saghaei"}]
+dependencies = ["edge-tts>=7.0,<8"]
+keywords = ["ai", "automation", "n8n", "ffmpeg", "ollama", "comfyui", "persian", "tts"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

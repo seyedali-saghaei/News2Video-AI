@@ -1,0 +1,12 @@
+{
+  "title": "Example news story",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "duration": 20,
+      "voice": "این یک متن نمونه برای تولید صدا است.",
+      "subtitle": "این یک زیرنویس نمونه است.",
+      "image_prompt": "Editorial news photograph, modern European city, vertical composition"
+    }
+  ]
+}
